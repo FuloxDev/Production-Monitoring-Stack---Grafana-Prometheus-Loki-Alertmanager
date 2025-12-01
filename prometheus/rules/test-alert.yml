@@ -1,0 +1,12 @@
+groups:
+  - name: test_alerts
+    interval: 10s
+    rules:
+      - alert: TestAlert
+        expr: vector(1)
+        labels:
+          severity: warning
+          service: test-service
+        annotations:
+          summary: "Test Alert"
+          description: "This is a test alert to verify Slack integration"

@@ -1,0 +1,320 @@
+services:
+
+#GRAFANA
+  grafana:
+    image: grafana/grafana-enterprise:12.0.2
+    container_name: grafana
+    user: "472:472"
+    restart: unless-stopped
+    env_file:
+      - .env
+
+    depends_on:
+      - prometheus
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp:rw,size=100m
+      - /var/lib/grafana/plugins:rw,size=50m
+      - /var/log:rw,size=50m
+    
+    environment:
+      # Security
+      - GF_SECURITY_ADMIN_USER=${GF_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+      # - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_USERS_ALLOW_ORG_CREATE=false
+      - GF_USERS_AUTO_ASSIGN_ORG_ROLE=Viewer
+      - GF_SECURITY_DISABLE_GRAVATAR=true
+      - GF_SECURITY_COOKIE_SECURE=true
+      - GF_SECURITY_COOKIE_SAMESITE=strict
+      - GF_SECURITY_STRICT_TRANSPORT_SECURITY=true
+      - GF_SECURITY_LOGIN_ATTEMPTS_BEFORE_LOCKOUT=5
+      - GF_SECURITY_LOGIN_LOCKOUT_DURATION=300
+
+      - GF_SECURITY_CONTENT_TYPE_PROTECTION=true
+      - GF_SECURITY_X_CONTENT_TYPE_OPTIONS=true
+      - GF_SECURITY_X_XSS_PROTECTION=true
+
+      - GF_SECURITY_LOGIN_REMEMBER_DAYS=7
+      - GF_SECURITY_LOGIN_MAXIMUM_INACTIVE_LIFETIME_DURATION=7d
+      - GF_SECURITY_LOGIN_MAXIMUM_LIFETIME_DURATION=30d
+
+      # Server
+      - GF_SERVER_PROTOCOL=https
+      - GF_SERVER_DOMAIN=${GRAFANA_DOMAIN:-localhost}
+      - GF_SERVER_ROOT_URL=https://${GRAFANA_DOMAIN:-localhost}:3000
+      - GF_SERVER_CERT_FILE=/etc/grafana/ssl/grafana.crt
+      - GF_SERVER_CERT_KEY=/etc/grafana/ssl/grafana.key
+
+      # Session
+      - GF_SESSION_COOKIE_SECURE=true
+      - GF_SESSION_COOKIE_SAMESITE=strict
+      - GF_SESSION_LIFE_TIME=86400
+      - GF_SESSION_COOKIE_HTTPONLY=true
+      - GF_SESSION_PROVIDER=memory
+
+      # Logging
+      - GF_LOG_MODE=console,file
+      - GF_LOG_LEVEL=warn
+      - GF_LOG_CONSOLE_FORMAT=json
+      - GF_LOG_FILE_FORMAT=json
+
+      # Plugins
+      - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=false
+
+      # Metrics
+      - GF_METRICS_ENABLED=${GF_METRICS_ENABLED}
+      - GF_METRICS_BASIC_AUTH_USERNAME=${GF_METRICS_BASIC_AUTH_USERNAME}
+      - GF_METRICS_BASIC_AUTH_PASSWORD=${GF_METRICS_BASIC_AUTH_PASSWORD}
+      
+    ports:
+      - "127.0.0.1:3000:3000"
+      
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./certs:/etc/grafana/ssl:ro
+
+    networks:
+      - monitoring
+
+
+#PROMETHEUS
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: prometheus
+    user: "nobody:nobody"
+    restart: unless-stopped
+    
+    # Container hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp:rw,size=100m
+      - /var/log:rw,size=50m
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.enable-lifecycle'
+      - '--web.config.file=/etc/config/web.yml'
+
+      - '--web.enable-remote-write-receiver'
+
+      - '--storage.tsdb.retention.time=15d'
+      - '--storage.tsdb.retention.size=10GB'
+      - '--web.max-connections=25'
+      - '--web.read-timeout=5m'
+      - '--log.level=warn'
+      - '--log.format=json'
+      
+    ports:
+      - "127.0.0.1:9090:9090"  # Localhost only
+      
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - ./config:/etc/config:ro
+      - ./certs:/certs:ro
+      - prom_data:/prometheus
+      
+    networks:
+      - monitoring
+      
+    env_file:
+      - .env
+
+
+#ALERTMANAGER
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: alertmanager
+    user: "nobody:nobody"
+    restart: unless-stopped
+    
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp:rw,size=50m
+      - /var/log:rw,size=25m
+
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=https://alertmanager.localhost:9093'
+      - '--web.config.file=/etc/alertmanager/auth/web.yml'
+      - '--log.level=info'
+      - '--log.format=json'
+      - '--data.retention=120h'
+      - '--alerts.gc-interval=30m'
+      - '--web.listen-address=0.0.0.0:9093'
+      
+    ports:
+      - "127.0.0.1:9093:9093"
+      
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+      - ./certs:/certs:ro
+      - alertmanager_data:/alertmanager
+        
+    networks:
+      - monitoring
+
+#LOKI
+  loki:
+    image: grafana/loki:3.4.5
+    container_name: loki
+    hostname: loki
+    user: "10001:10001"
+    restart: unless-stopped
+    
+    # Container hardening - matching your monitoring stack security
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    read_only: true
+    # Reduce tmpfs that might interfere with Loki's state
+    tmpfs:
+      - /tmp:rw,size=500m,noexec,nosuid,nodev
+      - /loki/rules-temp:rw,size=50m,noexec,nosuid,nodev
+    
+    command:
+      - '-config.file=/etc/loki/loki.yml'
+      - '-log.level=info'
+      - '-log.format=json'
+      - '-server.http-read-timeout=30s'
+      - '-server.http-write-timeout=30s'
+      - '-server.http-idle-timeout=120s'
+      - '-target=all'
+      
+    ports:
+      - "127.0.0.1:3100:3100"
+      
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro         
+      - ./loki/web.yml:/etc/loki/web.yml:ro           
+      - ./certs:/etc/loki/certs:ro                    
+      - loki_data:/loki
+      
+    networks:
+      - monitoring
+      
+    env_file:
+      - .env
+      
+    environment:
+      - LOKI_AUTH_ENABLED=${LOKI_AUTH_ENABLED:-true}
+      - LOKI_DOMAIN=${LOKI_DOMAIN:-localhost}
+    
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  alloy-local:
+    image: grafana/alloy:v1.10.1
+    container_name: alloy-monitoring-local
+    hostname: monitoring-server
+    user: "0"
+    restart: unless-stopped
+    
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - SYS_PTRACE
+      - NET_RAW
+      - SYS_ADMIN
+    read_only: true
+    tmpfs:
+      - /tmp:rw,size=1g,noexec,nosuid,nodev
+      - /var/lib/alloy/tmp:rw,size=100m,noexec,nosuid,nodev
+    
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --server.http.ui-path-prefix=/
+      - --storage.path=/var/lib/alloy/data
+      - --stability.level=generally-available
+      - --disable-reporting=true
+      
+    # Expose only locally for debugging
+    ports:
+      - "127.0.0.1:12345:12345"
+      
+    volumes:
+      - ./config/alloy-monitoring.alloy:/etc/alloy/config.alloy:ro
+      - /:/rootfs:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run:/var/run:ro
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - alloy_local_data:/var/lib/alloy/data
+      
+    networks:
+      - monitoring
+      
+    environment:
+      - HOSTNAME=monitoring-server
+      - ENVIRONMENT=production
+      
+
+#VOLUMES
+volumes:
+  prom_data: {}
+  grafana-storage: {}
+  alertmanager_data: {}
+  loki_data: {}
+  alloy_local_data: {}
+
+
+#NETWORK
+networks:
+  monitoring:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1

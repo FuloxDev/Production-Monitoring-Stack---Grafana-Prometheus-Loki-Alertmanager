@@ -1,0 +1,164 @@
+// ==========================================
+// SYSTEM METRICS COLLECTION
+// ==========================================
+prometheus.exporter.unix "node" {
+  disable_collectors = [
+    "powersupplyclass",
+    "hwmon",
+    "arp",
+    "bcache", 
+    "bonding",
+    "btrfs",
+    "edac",
+    "fibrechannel",
+    "infiniband",
+    "ipvs",
+    "mdadm",
+    "nfs",
+    "nfsd",
+    "nvme",
+    "rapl",
+    "selinux",
+    "tapestats",
+    "textfile",
+    "thermal_zone",
+  ]
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = "${PROM_URL}"
+    
+    basic_auth {
+      username = "${PROM_USERNAME}"
+      password = "${PROM_PASSWORD}"
+    }
+    
+    tls_config {
+      insecure_skip_verify = true
+    }
+  }
+}
+
+prometheus.scrape "monitoring_stack_server_metrics" {
+  targets = prometheus.exporter.unix.node.targets
+  scrape_interval = "15s"
+  scrape_timeout = "10s"
+  job_name = "monitoring-stack-node-exporter"
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+
+// ==========================================
+// MONITORING STACK METRICS
+// ==========================================
+
+// Prometheus metrics (internal)
+prometheus.scrape "prometheus_metrics" {
+  targets = [
+    {
+      __address__ = "prometheus:9090",
+      __metrics_path__ = "/metrics",
+      __scheme__ = "https",
+    },
+  ]
+  
+  scrape_interval = "15s"
+  scrape_timeout = "10s"
+  job_name = "prometheus-metrics"
+  forward_to = [prometheus.remote_write.default.receiver]
+    
+  tls_config {
+    insecure_skip_verify = true
+  }
+  
+  basic_auth {
+    username = "${PROM_USERNAME}"
+    password = "${PROM_PASSWORD}"
+  }
+}
+
+// Grafana metrics
+prometheus.scrape "grafana_metrics" {
+  targets = [
+    {
+      __address__ = "grafana:3000",
+      __metrics_path__ = "/metrics",
+      __scheme__ = "https",
+    },
+  ]
+  
+  scrape_interval = "30s"
+  scrape_timeout = "10s"
+  job_name = "grafana-metrics"
+  forward_to = [prometheus.remote_write.default.receiver]
+    
+  tls_config {
+    insecure_skip_verify = true
+  }
+  
+  basic_auth {
+    username = "${GF_METRICS_BASIC_AUTH_USERNAME}"
+    password = "${GF_METRICS_BASIC_AUTH_PASSWORD}"
+  }
+}
+
+// Alertmanager metrics
+prometheus.scrape "alertmanager_metrics" {
+  targets = [
+    {
+      __address__ = "alertmanager:9093",
+      __metrics_path__ = "/metrics",
+      __scheme__ = "https",
+    },
+  ]
+  
+  scrape_interval = "30s"
+  scrape_timeout = "10s"
+  job_name = "alertmanager-metrics"
+  forward_to = [prometheus.remote_write.default.receiver]
+    
+  tls_config {
+    insecure_skip_verify = true
+  }
+  
+  basic_auth {
+    username = "${ALERTMANAGER_USERNAME}"
+    password = "${ALERTMANAGER_PASSWORD}"
+  }
+}
+
+// ==========================================
+// GITLAB RUNNER METRICS
+// ==========================================
+
+// GitLab Runner metrics
+prometheus.scrape "gitlab_runner_metrics" {
+  targets = [
+    {
+      __address__ = "gitlab-runner:9252",
+      __metrics_path__ = "/metrics",
+      __scheme__ = "http",
+    },
+  ]
+  
+  scrape_interval = "10s"
+  scrape_timeout = "5s"
+  job_name = "gitlab-runner"
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+// ==========================================
+// DOCKER CONTAINER METRICS
+// ==========================================
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+prometheus.scrape "docker_containers" {
+  targets = discovery.docker.containers.targets
+  scrape_interval = "30s"
+  scrape_timeout = "10s"
+  job_name = "docker"
+  forward_to = []
+}

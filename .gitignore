@@ -1,0 +1,4 @@
+certs/*
+config/alloy-monitoring.alloy
+*web.yml
+prometheus/prometheus.yml

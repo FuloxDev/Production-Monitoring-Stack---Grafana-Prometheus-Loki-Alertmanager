@@ -1,0 +1,145 @@
+groups:
+  # ============================================
+  # CRITICAL SERVICE HEALTH ALERTS
+  # ============================================
+  - name: accounts_service_critical
+    interval: 30s
+    rules:
+      - alert: AccountsServiceDown
+        expr: up{job="accounts"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: accounts-api
+          category: availability
+        annotations:
+          summary: "Accounts service is down"
+          description: "Accounts Node.js service has been down for more than 1 minute on instance {{ $labels.instance }}"
+
+      - alert: HighMemoryUsage
+        expr: accounts_nodejs_process_resident_memory_bytes / 1024 / 1024 > 1024
+        for: 5m
+        labels:
+          severity: critical
+          service: accounts-api
+          category: resources
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | humanize }}MB, threshold is 1GB"
+
+      - alert: HighHeapUsage
+        expr: (accounts_nodejs_nodejs_heap_size_used_bytes / accounts_nodejs_nodejs_heap_size_total_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: critical
+          service: accounts-api
+          category: resources
+        annotations:
+          summary: "High heap usage detected"
+          description: "Heap usage is above 90 percent"
+
+      - alert: HighEventLoopLag
+        expr: accounts_nodejs_nodejs_eventloop_lag_seconds > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          service: accounts-api
+          category: performance
+        annotations:
+          summary: "High event loop lag"
+          description: "Event loop lag is {{ $value }}s, threshold is 0.1s"
+
+  # ============================================
+  # MONGODB ALERTS
+  # ============================================
+  - name: accounts_mongodb_alerts
+    interval: 30s
+    rules:
+      - alert: MongoDBConnectionDown
+        expr: accounts_nodejs_mongodb_connection_health == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: mongodb
+          category: database
+        annotations:
+          summary: "MongoDB connection lost"
+          description: "Cannot connect to MongoDB"
+
+      - alert: MongoDBConnectionPoolLow
+        expr: accounts_nodejs_mongodb_connection_pool{state="available"} < 10
+        for: 2m
+        labels:
+          severity: warning
+          service: mongodb
+          category: database
+        annotations:
+          summary: "MongoDB connection pool running low"
+          description: "Only {{ $value }} connections available in MongoDB pool"
+
+      - alert: MongoDBSlowQueries
+        expr: histogram_quantile(0.95, rate(accounts_nodejs_mongodb_query_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: mongodb
+          category: database
+        annotations:
+          summary: "MongoDB slow queries detected"
+          description: "P95 query latency is {{ $value }}s"
+
+  # ============================================
+  # REDIS ALERTS
+  # ============================================
+  - name: accounts_redis_alerts
+    interval: 30s
+    rules:
+      - alert: RedisConnectionDown
+        expr: accounts_nodejs_redis_connection_health == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+          category: cache
+        annotations:
+          summary: "Redis connection lost"
+          description: "Cannot connect to Redis"
+
+  # ============================================
+  # S3 ALERTS
+  # ============================================
+  - name: accounts_s3_alerts
+    interval: 30s
+    rules:
+      - alert: S3ConnectionDown
+        expr: accounts_nodejs_s3_connection_health == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: s3
+          category: storage
+        annotations:
+          summary: "S3 connection lost"
+          description: "Cannot connect to S3 client {{ $labels.client_type }} in region {{ $labels.region }}"
+
+      - alert: S3HighErrorRate
+        expr: rate(accounts_nodejs_s3_operation_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: s3
+          category: storage
+        annotations:
+          summary: "High S3 error rate"
+          description: "S3 errors at {{ $value }} per second"
+
+      - alert: S3SlowOperations
+        expr: histogram_quantile(0.95, rate(accounts_nodejs_s3_operation_duration_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: s3
+          category: storage
+        annotations:
+          summary: "Slow S3 operations"
+          description: "P95 S3 latency is {{ $value }}s"

@@ -1,0 +1,204 @@
+groups:
+  - name: kafka_cluster_health
+    interval: 30s
+    rules:
+      # Critical: Broker is down
+      - alert: KafkaBrokerDown
+        expr: kafka_server_kafkaserver_brokerstate != 3
+        for: 1m
+        labels:
+          severity: critical
+          component: kafka
+        annotations:
+          summary: "Kafka broker {{ $labels.instance }} is down"
+          description: "Broker {{ $labels.broker_id }} ({{ $labels.instance }}) is not in running state (state={{ $value }})"
+
+      # Critical: Under-replicated partitions
+      - alert: KafkaUnderReplicatedPartitions
+        expr: kafka_server_replicamanager_underreplicatedpartitions > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: kafka
+        annotations:
+          summary: "Kafka has under-replicated partitions"
+          description: "Broker {{ $labels.broker_id }} has {{ $value }} under-replicated partitions for more than 5 minutes"
+
+      # Critical: Offline partitions
+      - alert: KafkaOfflinePartitions
+        expr: kafka_controller_kafkacontroller_offlinepartitionscount > 0
+        for: 2m
+        labels:
+          severity: critical
+          component: kafka
+        annotations:
+          summary: "Kafka has offline partitions"
+          description: "There are {{ $value }} offline partitions in the cluster"
+
+      # Warning: ISR shrinks
+      - alert: KafkaISRShrinks
+        expr: rate(kafka_server_replicamanager_isrshrinks_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka
+        annotations:
+          summary: "Kafka ISR is shrinking"
+          description: "Broker {{ $labels.broker_id }} ISR shrink rate is {{ $value }}/sec"
+
+      # Warning: ISR expansions
+      - alert: KafkaISRExpansion
+        expr: rate(kafka_server_replicamanager_isrexpands_total[5m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          component: kafka
+        annotations:
+          summary: "Kafka ISR is expanding frequently"
+          description: "Broker {{ $labels.broker_id }} ISR expansion rate is {{ $value }}/sec. This may indicate broker instability."
+
+      # Critical: No active controller
+      - alert: KafkaNoActiveController
+        expr: sum(kafka_controller_kafkacontroller_activecontrollercount) != 1
+        for: 2m
+        labels:
+          severity: critical
+          component: kafka
+        annotations:
+          summary: "Kafka cluster has no active controller"
+          description: "Active controller count is {{ $value }}. Should be exactly 1."
+
+      # Warning: Too many active controllers (split brain)
+      - alert: KafkaMultipleActiveControllers
+        expr: sum(kafka_controller_kafkacontroller_activecontrollercount) > 1
+        for: 1m
+        labels:
+          severity: critical
+          component: kafka
+        annotations:
+          summary: "Multiple active Kafka controllers detected"
+          description: "There are {{ $value }} active controllers. Possible split-brain scenario!"
+
+  - name: kafka_performance
+    interval: 30s
+    rules:
+      # Warning: High produce latency
+      - alert: KafkaHighProduceLatency
+        expr: kafka_network_requestmetrics_totaltimems{request="Produce",quantile="0.99"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka
+        annotations:
+          summary: "High Kafka produce latency"
+          description: "Broker {{ $labels.broker_id }} has 99th percentile produce latency of {{ $value }}ms"
+
+      # Warning: High fetch latency
+      - alert: KafkaHighFetchLatency
+        expr: kafka_network_requestmetrics_totaltimems{request="FetchConsumer",quantile="0.99"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka
+        annotations:
+          summary: "High Kafka fetch latency"
+          description: "Broker {{ $labels.broker_id }} has 99th percentile fetch latency of {{ $value }}ms"
+
+      # Warning: Too many failed produce requests
+      - alert: KafkaProduceRequestsFailed
+        expr: rate(kafka_server_brokertopicmetrics_failedproducerequests_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka
+        annotations:
+          summary: "Kafka produce requests failing"
+          description: "Broker {{ $labels.broker_id }} has {{ $value }} failed produce requests/sec"
+
+      # Warning: Too many failed fetch requests
+      - alert: KafkaFetchRequestsFailed
+        expr: rate(kafka_server_brokertopicmetrics_failedfetchrequests_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka
+        annotations:
+          summary: "Kafka fetch requests failing"
+          description: "Broker {{ $labels.broker_id }} has {{ $value }} failed fetch requests/sec"
+
+  - name: kafka_disk_and_resources
+    interval: 30s
+    rules:
+      # Critical: High disk usage
+      - alert: KafkaDiskUsageHigh
+        expr: |
+          (sum(kafka_log_logmanager_size) by (broker_id, instance) / 5368709120) * 100 > 85
+        for: 10m
+        labels:
+          severity: critical
+          component: kafka
+        annotations:
+          summary: "Kafka broker disk usage is high"
+          description: "Broker {{ $labels.broker_id }} disk usage is {{ $value }}% of retention limit"
+
+      # Warning: Low disk space
+      - alert: KafkaDiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint=~"/var/lib/kafka|/data"} / node_filesystem_size_bytes{mountpoint=~"/var/lib/kafka|/data"}) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka
+        annotations:
+          summary: "Kafka data disk space is low"
+          description: "Disk space on {{ $labels.instance }} is {{ $value }}% available"
+
+  - name: kafka_zookeeper
+    interval: 30s
+    rules:
+      # Critical: ZooKeeper connection issues
+      - alert: KafkaZooKeeperDisconnects
+        expr: rate(kafka_server_sessionexpirelistener_zookeeperdisconnects_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          component: kafka
+        annotations:
+          summary: "Kafka broker disconnecting from ZooKeeper"
+          description: "Broker {{ $labels.broker_id }} has {{ $value }} ZooKeeper disconnects/sec"
+
+      # Warning: ZooKeeper session expiration
+      - alert: KafkaZooKeeperSessionExpired
+        expr: rate(kafka_server_sessionexpirelistener_zookeeperexpires_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: kafka
+        annotations:
+          summary: "Kafka ZooKeeper session expired"
+          description: "Broker {{ $labels.broker_id }} ZooKeeper session expired ({{ $value }} expirations/sec)"
+
+      # Warning: High ZooKeeper request latency
+      - alert: KafkaZooKeeperHighLatency
+        expr: kafka_server_zookeeperclientmetrics_zookeeperrequestlatencyms{quantile="0.99"} > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka
+        annotations:
+          summary: "High ZooKeeper request latency"
+          description: "Broker {{ $labels.broker_id }} has 99th percentile ZK latency of {{ $value }}ms"
+
+  - name: kafka_consumer_groups
+    interval: 30s
+    rules:
+      # Warning: Consumer group lag (if kafka_lag_exporter is installed)
+      - alert: KafkaConsumerGroupLag
+        expr: kafka_consumergroup_lag > 10000
+        for: 10m
+        labels:
+          severity: warning
+          component: kafka
+        annotations:
+          summary: "High consumer group lag"
+          description: "Consumer group {{ $labels.consumergroup }} on topic {{ $labels.topic }} has lag of {{ $value }} messages"
