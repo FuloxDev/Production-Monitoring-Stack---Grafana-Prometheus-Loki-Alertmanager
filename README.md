@@ -1,5 +1,10 @@
 # 🔍 Production Monitoring Stack
 
+[![Docker](https://img.shields.io/badge/Docker-24.x-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Prometheus](https://img.shields.io/badge/Prometheus-3.5.0-E6522C?logo=prometheus&logoColor=white)](https://prometheus.io/)
+[![Grafana](https://img.shields.io/badge/Grafana-12.0.2-F46800?logo=grafana&logoColor=white)](https://grafana.com/)
+[![Loki](https://img.shields.io/badge/Loki-3.4.5-F46800?logo=grafana&logoColor=white)](https://grafana.com/oss/loki/)
+
 Production-grade, security-hardened monitoring and observability stack for microservice infrastructure. Provides comprehensive monitoring, alerting, and log aggregation for microservices, Kafka clusters, and any language supported applications (here using Node.js application).
 
 ## 📋 Table of Contents
