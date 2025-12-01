@@ -1,6 +1,6 @@
 # 🔍 Production Monitoring Stack
 
-Production-grade, security-hardened monitoring and observability stack for cryptocurrency exchange infrastructure. Provides comprehensive monitoring, alerting, and log aggregation for microservices, Kafka clusters, and Node.js applications.
+Production-grade, security-hardened monitoring and observability stack for microservice infrastructure. Provides comprehensive monitoring, alerting, and log aggregation for microservices, Kafka clusters, and any language supported applications (here using Node.js application).
 
 ## 📋 Table of Contents
 
